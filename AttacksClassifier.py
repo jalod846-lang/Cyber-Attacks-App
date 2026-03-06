@@ -6,6 +6,7 @@ import random
 from datetime import datetime
 import io
 import joblib
+import os
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, classification_report, confusion_matrix
 
 # Page config
@@ -27,9 +28,34 @@ if 'results_df' not in st.session_state:
     st.session_state.results_df = None
 if 'has_predictions' not in st.session_state:
     st.session_state.has_predictions = False
+if 'using_local_model' not in st.session_state:
+    st.session_state.using_local_model = False
+
+# Constants
+LOCAL_MODEL_PATH = "random_forest_pipeline.joblib"
+
+# Function to load local model
+def load_local_model():
+    """Load the default local model if it exists"""
+    if os.path.exists(LOCAL_MODEL_PATH):
+        try:
+            model = joblib.load(LOCAL_MODEL_PATH)
+            return model, "Local Random Forest"
+        except Exception as e:
+            st.warning(f"⚠️ Could not load local model: {e}")
+            return None, None
+    return None, None
+
+# Try to load local model at startup
+if st.session_state.model is None:
+    local_model, local_name = load_local_model()
+    if local_model is not None:
+        st.session_state.model = local_model
+        st.session_state.model_name = local_name
+        st.session_state.using_local_model = True
 
 # Header
-st.title(" Cyber Attacks Classifier ")
+st.title("🛡️ Cyber Attacks Classifier")
 st.markdown("---")
 
 # Create 2 columns for better layout
@@ -53,7 +79,17 @@ with col_left:
     st.markdown("---")
     st.header("🤖 Step 2: Load Model")
     
-    # Model upload
+    # Show current model status
+    if st.session_state.model is not None:
+        if st.session_state.using_local_model:
+            st.info(f"📌 **Current Model:** {st.session_state.model_name} (Default Local Model)")
+        else:
+            st.info(f"📌 **Current Model:** {st.session_state.model_name} (Uploaded Model)")
+    
+    # Model upload option (overrides local)
+    st.markdown("### ⬆️ Upload Custom Model (Optional)")
+    st.caption("Upload a model to override the default local model")
+    
     model_file = st.file_uploader("Choose model file", type=['pkl', 'joblib'], key="model_upload")
     
     if model_file is not None:
@@ -62,18 +98,33 @@ with col_left:
             file_content = model_file.getvalue()
             try:
                 st.session_state.model = pickle.loads(file_content)
-                st.session_state.model_name = "Model (pickle)"
+                st.session_state.model_name = "Custom Model (pickle)"
+                st.session_state.using_local_model = False
             except:
                 try:
                     st.session_state.model = joblib.load(io.BytesIO(file_content))
-                    st.session_state.model_name = "Model (joblib)"
+                    st.session_state.model_name = "Custom Model (joblib)"
+                    st.session_state.using_local_model = False
                 except:
                     st.error("Could not load model")
             
             if st.session_state.model:
-                st.success(f"✅ Model loaded: {type(st.session_state.model).__name__}")
+                st.success(f"✅ Custom model loaded: {type(st.session_state.model).__name__}")
         except Exception as e:
             st.error(f"Error: {e}")
+    
+    # Button to reset to local model
+    if st.session_state.model is not None and not st.session_state.using_local_model:
+        if st.button("🔄 Reset to Local Model", use_container_width=True):
+            local_model, local_name = load_local_model()
+            if local_model is not None:
+                st.session_state.model = local_model
+                st.session_state.model_name = local_name
+                st.session_state.using_local_model = True
+                st.success("✅ Switched back to local model")
+                st.rerun()
+            else:
+                st.error("❌ Local model not found")
 
 # ==================== RIGHT COLUMN - PREDICT & ANALYZE ====================
 with col_right:
@@ -81,9 +132,9 @@ with col_right:
     
     # Check if we have data and model
     if st.session_state.data is None:
-        st.warning("Please upload data first")
+        st.warning("⚠️ Please upload data first")
     elif st.session_state.model is None:
-        st.warning("Please load a model first")
+        st.warning("⚠️ Please load a model first")
     else:
         # Check for label column
         if 'Label' in st.session_state.data.columns:
@@ -229,4 +280,4 @@ with col_right:
 
 # Footer
 st.markdown("---")
-st.markdown("<div style='text-align: center;'> Cyber Attacks Classifier </div>", unsafe_allow_html=True)
+st.markdown("<div style='text-align: center;'>🛡️ Cyber Attacks Classifier | Default Model: random_forest_pipeline.joblib</div>", unsafe_allow_html=True)
